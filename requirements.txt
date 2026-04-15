@@ -1,6 +1,6 @@
 # Core Framework
 fastapi==0.115.0
-uvicorn[standard]==0.30.6
+uvicorn==0.30.6
 python-multipart==0.0.9
 
 # Streamlit Frontend
@@ -16,8 +16,6 @@ tavily-python==0.5.0
 python-dotenv==1.0.1
 pydantic-settings==2.5.2
 
-# Audio Processing
-soundfile==0.12.1
-
-# Utilities
-uuid6==2024.7.10
+# NOTE:
+# Keep Streamlit Cloud installs lean and wheel-friendly.
+# Add optional audio/system deps only when required by hosted runtime.
