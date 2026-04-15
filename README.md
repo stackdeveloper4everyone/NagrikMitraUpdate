@@ -22,7 +22,9 @@ python run.py
 frontend/streamlit_app.py
 ```
 
-4. Add app secrets in Streamlit:
+4. Streamlit Cloud will use `frontend/requirements.txt` for dependency install.
+
+5. Add app secrets in Streamlit:
 
 ```toml
 API_BASE_URL = "https://<your-backend-domain>"
