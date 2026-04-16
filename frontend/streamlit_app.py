@@ -28,6 +28,9 @@ API_BASE = st.secrets.get(
     os.getenv("API_BASE_URL", "http://localhost:8000"),
 ).rstrip("/")
 
+# Demo mode - works without backend
+DEMO_MODE = st.secrets.get("DEMO_MODE", os.getenv("DEMO_MODE", "true")).lower() == "true"
+
 # â”€â”€â”€ CUSTOM CSS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 st.markdown("""
@@ -248,9 +251,10 @@ with st.sidebar:
 # â”€â”€â”€ MAIN CONTENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 # Header
-st.markdown("""
+demo_badge = " <span style='background:#ff6f00;color:white;padding:2px 8px;border-radius:10px;font-size:0.7rem;'>DEMO MODE</span>" if DEMO_MODE else ""
+st.markdown(f"""
 <div class="main-header">
-    <h1>NagrikMitra</h1>
+    <h1>NagrikMitra{demo_badge}</h1>
     <p>AI-Powered Unified Multilingual Citizen Service Assistant</p>
     <p style="font-size: 0.8rem; opacity: 0.7;">Powered by Sarvam AI | 11 Indian Languages Supported</p>
 </div>
@@ -395,49 +399,79 @@ with chat_col:
     if user_input:
         st.session_state.chat_history.append({"role": "user", "content": user_input})
 
-        try:
-            response = requests.post(
-                f"{API_BASE}/api/chat",
-                json={
-                    "message": user_input,
-                    "session_id": st.session_state.session_id,
-                    "state": selected_state or None,
-                    "district": district or None,
-                    "language_preference": LANGUAGES.get(selected_language, ""),
+        if DEMO_MODE:
+            # Demo responses
+            demo_responses = {
+                "scheme": "I found several government schemes that might help you. Here are some relevant ones:\n\n🏠 **Pradhan Mantri Awas Yojana** - Housing for all\n💰 **PM Kisan Samman Nidhi** - Financial support for farmers\n📚 **Pradhan Mantri Jan Dhan Yojana** - Banking for everyone\n\nWould you like me to check your eligibility for any of these?",
+                "eligibility": "To check your eligibility, I need some basic information. Please fill out the eligibility form in the right panel, or tell me:\n- Your age\n- Annual income\n- Occupation\n- State of residence\n\nI can then match you with relevant schemes!",
+                "grievance": "I can help you file a grievance. Please provide:\n- Department (e.g., electricity, water, roads)\n- Description of the issue\n- Location details\n\nI'll guide you through the process step by step.",
+                "default": "Namaste! I'm NagrikMitra, your AI assistant for government services. I can help you with:\n\n• Finding government schemes\n• Checking eligibility\n• Filing grievances\n• Getting information in 11 Indian languages\n\nWhat would you like to know about?"
+            }
+
+            # Simple keyword matching for demo
+            response_text = demo_responses["default"]
+            if any(word in user_input.lower() for word in ["scheme", "schemes", "yojana"]):
+                response_text = demo_responses["scheme"]
+            elif any(word in user_input.lower() for word in ["eligible", "eligibility", "check"]):
+                response_text = demo_responses["eligibility"]
+            elif any(word in user_input.lower() for word in ["grievance", "complaint", "problem"]):
+                response_text = demo_responses["grievance"]
+
+            st.session_state.chat_history.append({
+                "role": "assistant",
+                "content": response_text,
+                "meta": {
+                    "detected_language": "en-IN",
+                    "intent": "general",
+                    "from_cache": False,
+                    "pii_detected": False,
                 },
-                timeout=30,
-            )
-            if response.status_code == 200:
-                data = response.json()
-                st.session_state.chat_history.append({
-                    "role": "assistant",
-                    "content": data["response"],
-                    "meta": {
-                        "detected_language": data.get("detected_language", ""),
-                        "intent": data.get("intent", ""),
-                        "from_cache": data.get("from_cache", False),
-                        "pii_detected": data.get("pii_detected", False),
-                        "schemes_referenced": data.get("schemes_referenced", []),
+            })
+        else:
+            # Original backend code
+            try:
+                response = requests.post(
+                    f"{API_BASE}/api/chat",
+                    json={
+                        "message": user_input,
+                        "session_id": st.session_state.session_id,
+                        "state": selected_state or None,
+                        "district": district or None,
+                        "language_preference": LANGUAGES.get(selected_language, ""),
                     },
-                })
-                # Update scheme cards if schemes were referenced
-                if data.get("schemes_referenced"):
-                    st.session_state.selected_schemes = data["schemes_referenced"]
-            else:
+                    timeout=30,
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": data["response"],
+                        "meta": {
+                            "detected_language": data.get("detected_language", ""),
+                            "intent": data.get("intent", ""),
+                            "from_cache": data.get("from_cache", False),
+                            "pii_detected": data.get("pii_detected", False),
+                            "schemes_referenced": data.get("schemes_referenced", []),
+                        },
+                    })
+                    # Update scheme cards if schemes were referenced
+                    if data.get("schemes_referenced"):
+                        st.session_state.selected_schemes = data["schemes_referenced"]
+                else:
+                    st.session_state.chat_history.append({
+                        "role": "assistant",
+                        "content": "Sorry, I encountered an error. Please try again.",
+                    })
+            except requests.exceptions.ConnectionError:
                 st.session_state.chat_history.append({
                     "role": "assistant",
-                    "content": "Sorry, I encountered an error. Please try again.",
+                    "content": "Cannot connect to the backend server. Please ensure it's running.",
                 })
-        except requests.exceptions.ConnectionError:
-            st.session_state.chat_history.append({
-                "role": "assistant",
-                "content": "Cannot connect to the backend server. Please ensure it's running.",
-            })
-        except Exception as e:
-            st.session_state.chat_history.append({
-                "role": "assistant",
-                "content": f"Error: {str(e)}",
-            })
+            except Exception as e:
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content": f"Error: {str(e)}",
+                })
         st.rerun()
 
 
@@ -451,32 +485,79 @@ with info_col:
         st.markdown("#### Government Schemes")
 
         scheme_cat = st.selectbox("Filter by category", CATEGORIES, key="scheme_cat")
-        try:
-            params = {}
-            if selected_state:
-                params["state"] = selected_state
+        if DEMO_MODE:
+            # Demo schemes
+            demo_schemes = [
+                {
+                    "name_en": "Pradhan Mantri Awas Yojana",
+                    "name_hi": "प्रधान मंत्री आवास योजना",
+                    "category": "Housing",
+                    "is_central": True,
+                    "description_en": "Housing for all by 2022",
+                    "benefits": "₹2.5 lakh subsidy for rural, ₹2.67 lakh for urban"
+                },
+                {
+                    "name_en": "PM Kisan Samman Nidhi",
+                    "name_hi": "पीएम किसान सम्मान निधि",
+                    "category": "Agriculture",
+                    "is_central": True,
+                    "description_en": "Financial support to farmers",
+                    "benefits": "₹6,000 per year in three installments"
+                },
+                {
+                    "name_en": "Ayushman Bharat Yojana",
+                    "name_hi": "आयुष्मान भारत योजना",
+                    "category": "Health",
+                    "is_central": True,
+                    "description_en": "Health insurance for all",
+                    "benefits": "₹5 lakh coverage per family per year"
+                }
+            ]
+
+            filtered_schemes = demo_schemes
             if scheme_cat and scheme_cat != "All":
-                params["category"] = scheme_cat
-            resp = requests.get(f"{API_BASE}/api/schemes", params=params, timeout=5)
-            if resp.status_code == 200:
-                schemes = resp.json()
-                if not schemes:
-                    st.info("No schemes found. Try changing filters.")
-                for scheme in schemes[:10]:
-                    badge_type = "badge-central" if scheme.get("is_central") else "badge-state"
-                    badge_label = "Central" if scheme.get("is_central") else "State"
-                    st.markdown(f"""
-                    <div class="scheme-card">
-                        <h4>{scheme['name_en']}</h4>
-                        <p style="color: #666; font-size: 0.85rem;">{scheme.get('name_hi', '')}</p>
-                        <span class="scheme-badge badge-category">{scheme.get('category', '')}</span>
-                        <span class="scheme-badge {badge_type}">{badge_label}</span>
-                        <p style="margin-top: 0.5rem; font-size: 0.9rem;">{scheme.get('description_en', '')[:150]}...</p>
-                        <p style="color: #2e7d32; font-weight: 600;">ðŸ’° {scheme.get('benefits', '')[:100]}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-        except Exception:
-            st.info("Connect to backend to browse schemes")
+                filtered_schemes = [s for s in demo_schemes if s["category"] == scheme_cat]
+
+            for scheme in filtered_schemes[:10]:
+                badge_type = "badge-central" if scheme.get("is_central") else "badge-state"
+                badge_label = "Central" if scheme.get("is_central") else "State"
+                st.markdown(f"""
+                <div class="scheme-card">
+                    <h4>{scheme['name_en']}</h4>
+                    <p style="color: #666; font-size: 0.85rem;">{scheme.get('name_hi', '')}</p>
+                    <span class="scheme-badge badge-category">{scheme.get('category', '')}</span>
+                    <span class="scheme-badge {badge_type}">{badge_label}</span>
+                    <p style="margin-top: 0.5rem; font-size: 0.9rem;">{scheme.get('description_en', '')}</p>
+                    <p style="color: #2e7d32; font-weight: 600;">ðŸ’° {scheme.get('benefits', '')}</p>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            try:
+                params = {}
+                if selected_state:
+                    params["state"] = selected_state
+                if scheme_cat and scheme_cat != "All":
+                    params["category"] = scheme_cat
+                resp = requests.get(f"{API_BASE}/api/schemes", params=params, timeout=5)
+                if resp.status_code == 200:
+                    schemes = resp.json()
+                    if not schemes:
+                        st.info("No schemes found. Try changing filters.")
+                    for scheme in schemes[:10]:
+                        badge_type = "badge-central" if scheme.get("is_central") else "badge-state"
+                        badge_label = "Central" if scheme.get("is_central") else "State"
+                        st.markdown(f"""
+                        <div class="scheme-card">
+                            <h4>{scheme['name_en']}</h4>
+                            <p style="color: #666; font-size: 0.85rem;">{scheme.get('name_hi', '')}</p>
+                            <span class="scheme-badge badge-category">{scheme.get('category', '')}</span>
+                            <span class="scheme-badge {badge_type}">{badge_label}</span>
+                            <p style="margin-top: 0.5rem; font-size: 0.9rem;">{scheme.get('description_en', '')[:150]}...</p>
+                            <p style="color: #2e7d32; font-weight: 600;">ðŸ’° {scheme.get('benefits', '')[:100]}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+            except Exception:
+                st.info("Connect to backend to browse schemes")
 
     # â”€â”€ Eligibility Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with tab2:
@@ -490,7 +571,43 @@ with info_col:
             elig_state = st.selectbox("State", STATES[1:], key="elig_state")
 
             if st.form_submit_button("Check Eligibility", type="primary"):
-                try:
+                if DEMO_MODE:
+                    # Demo eligibility results
+                    demo_results = [
+                        {
+                            "scheme_name": "Pradhan Mantri Awas Yojana",
+                            "eligible": True,
+                            "match_score": 0.85,
+                            "reasons": ["Age matches", "Income eligible", "Rural area"],
+                            "missing_criteria": []
+                        },
+                        {
+                            "scheme_name": "PM Kisan Samman Nidhi",
+                            "eligible": True,
+                            "match_score": 0.92,
+                            "reasons": ["Farmer occupation", "Land ownership", "Age criteria met"],
+                            "missing_criteria": []
+                        },
+                        {
+                            "scheme_name": "Ayushman Bharat Yojana",
+                            "eligible": False,
+                            "match_score": 0.45,
+                            "reasons": ["Income slightly above limit"],
+                            "missing_criteria": ["Income should be below ₹5 lakh"]
+                        }
+                    ]
+
+                    st.success(f"Found {len([r for r in demo_results if r['eligible']])} matching schemes!")
+                    for r in demo_results:
+                        icon = "✅" if r["eligible"] else "❌"
+                        st.markdown(f"""
+                        **{icon} {r['scheme_name']}**
+                        - Match Score: {'⭐' * int(r['match_score'] * 5)}
+                        - {', '.join(r['reasons'][:3])}
+                        """)
+                        if r.get("missing_criteria"):
+                            st.caption(f"⚠️ Missing: {', '.join(r['missing_criteria'])}")
+                else:
                     resp = requests.post(
                         f"{API_BASE}/api/eligibility",
                         json={
